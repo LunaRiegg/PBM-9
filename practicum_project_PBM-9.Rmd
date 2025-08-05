@@ -1,0 +1,573 @@
+---
+title: "Luna Riegg, practicum project"
+output: html_document
+date: "2025-04-15"
+---
+
+```{r setup, include=FALSE}
+library("haven")
+library("survey")
+library("jtools")
+library("remotes")
+#library(svrepmisc)
+library ("foreign")
+library (car)
+library(gtsummary)
+
+
+```
+
+
+
+```{r}
+nhisdata <- read_spss("Gewichtete Fälle, Lunas Project_2.sav")
+nrow (nhisdata)
+ncol(nhisdata)
+colnames(nhisdata)
+```
+```{r}
+nhisdata$Ethnicity.cat <- factor(nhisdata$Ethnicity.cat)
+nhisdata$Anxiety.sev = factor(nhisdata$Anxiety.sev)
+nhisdata$Depression.sev = factor(nhisdata$Depression.sev)
+nhisdata$General_Health = factor(nhisdata$General_Health)
+```
+
+```{r}
+nhisdata_survey <- svydesign(
+  id = ~PPSU,          # Clustering (Primary Sampling Units)
+  strata = ~PSTRAT,    # Stratification
+  nest = TRUE,         # Specifies that PSUs are nested within strata
+  weights = ~WTFA_A,   # Sampling weights
+  data = nhisdata     # Your raw survey data
+)
+```
+
+#chisquare test
+
+```{r}
+svychisq(~Need_Therapy + Age.all.data.0.1.cat, nhisdata_survey)
+```
+
+
+#logistic regression analysis in sample who needed therapy -CHIROPRACTOR
+
+options(survey.lonely.psu = "adjust") verändert die Art, wie R die Varianz schätzt, muss eingebaut werden, Weil Stata(112) nur 1 PSU enthält
+
+
+```{r}
+options(survey.lonely.psu = "adjust")
+```
+
+
+```{r}
+regressionNT_chiropractor <- svyglm( Chiropractor.cat ~ Age.all.data.0.1.cat + Sex.cat + Ethnicity.cat +
+                                      Education.cat + Insurance.cat.0.1 + General_Health + DEPEV.cat.0.1 + Depression.sev + ANXEV.cat.0.1 + Anxiety.sev,
+                                     family = quasibinomial(),
+                                     design = nhisdata_survey)
+round(
+  cbind(
+    summary(regressionNT_chiropractor,
+            df.resid = degf(regressionNT_chiropractor$survey.design))$coef,
+    confint(regressionNT_chiropractor,
+            ddf = degf(regressionNT_chiropractor$survey.design))
+  ),
+  4
+)
+```
+```{r}
+#get ANOVA Fs
+Anova(regressionNT_chiropractor, type = 3, test.statistic = "F",
+           error.df = degf(regressionNT_chiropractor$survey.design))
+```
+#Odds Ratio of Chiropractor
+```{r}
+
+OR.CI.Chiropractor <- cbind(
+        "AOR" = exp(coef(regressionNT_chiropractor)),
+        exp(confint(regressionNT_chiropractor,
+                    df.resid=degf(regressionNT_chiropractor$survey.design)))
+        )[-1,]
+                                
+round(OR.CI.Chiropractor, 3)
+```
+#Table Chiropractor
+```{r}
+install.packages("litedown")
+install.packages("xfun")
+
+```
+
+```{r}
+
+
+library(gtsummary)
+t1 <- regressionNT_chiropractor %>%
+  tbl_regression(intercept = T,
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 # estimate_fun = function(x) style_sigfig(x, digits = 2),
+  ) %>%
+  modify_column_hide(p.value) %>%
+  modify_caption("Weighted logistic regression results predicting chiropractor use in patients who needed therapy but did not get it")
+
+t2 <- regressionNT_chiropractor %>%
+  tbl_regression(intercept = F,     # No intercept in OR table
+                 exponentiate = T,  # OR = exp(B)
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 pvalue_fun   = function(x) style_pvalue(x, digits = 3),
+  ) %>%
+  add_global_p(keep = T, test.statistic = "F"
+               # Uncomment to use design df for Type III test p-values
+               # (but then they will not match the regression term p-values for
+               #  binary predictors)
+               #  error.df = degf(fit.ex8.1$survey.design)
+  )
+t1
+t2
+
+tbl_merge(
+  tbls = list(t1, t2),
+  tab_spanner = c("**Regression Coefficients**", "**Adjusted Odds Ratio**")
+)
+```
+#logistic regression analysis in sample who needed therapy - ACUPUNCTURIST
+
+```{r}
+options(survey.lonely.psu = "adjust")
+```
+
+```{r}
+regressionNT_acupuncturist <- svyglm( Acupuncture.cat ~ Age.all.data.0.1.cat + Sex.cat + Ethnicity.cat +
+                                      Education.cat + Insurance.cat.0.1 + General_Health + DEPEV.cat.0.1 + Depression.sev + ANXEV.cat.0.1 + Anxiety.sev,
+                                     family = quasibinomial(),
+                                     design = nhisdata_survey)
+round(
+  cbind(
+    summary(regressionNT_acupuncturist,
+            df.resid = degf(regressionNT_acupuncturist$survey.design))$coef,
+    confint(regressionNT_acupuncturist,
+            ddf = degf(regressionNT_acupuncturist$survey.design))
+  ),
+  4
+)
+```
+#Odds Ratio of Acupuncture
+```{r}
+
+OR.CI.Acupuncturist <- cbind(
+        "AOR" = exp(coef(regressionNT_acupuncturist)),
+        exp(confint(regressionNT_acupuncturist,
+                    df.resid=degf(regressionNT_acupuncturist$survey.design)))
+        )[-1,]
+                                
+round(OR.CI.Acupuncturist, 3)
+```
+```{r}
+table(nhisdata$Insurance.cat.0.1, nhisdata$Acupuncture.cat)
+```
+
+```{r}
+install.packages("logistf")  
+library(logistf)
+
+model <- logistf(Acupuncture.cat ~ Insurance.cat.0.1, data = nhisdata)
+summary(model)
+
+```
+
+```{r}
+exp(cbind(OR = coef(model), confint(model)))
+
+```
+```{r}
+library(gtsummary)
+t1 <- regressionNT_acupuncturist %>%
+  tbl_regression(intercept = T,
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 # estimate_fun = function(x) style_sigfig(x, digits = 2),
+  ) %>%
+  modify_column_hide(p.value) %>%
+  modify_caption("Weighted logistic regression results predicting acupuncture use in patients who needed therapy but did not get it")
+
+t2 <- regressionNT_acupuncturist %>%
+  tbl_regression(intercept = F,     # No intercept in OR table
+                 exponentiate = T,  # OR = exp(B)
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 pvalue_fun   = function(x) style_pvalue(x, digits = 3),
+  ) %>%
+  add_global_p(keep = T, test.statistic = "F"
+               # Uncomment to use design df for Type III test p-values
+               # (but then they will not match the regression term p-values for
+               #  binary predictors)
+               #  error.df = degf(fit.ex8.1$survey.design)
+  )
+t1
+t2
+
+tbl_merge(
+  tbls = list(t1, t2),
+  tab_spanner = c("**Regression Coefficients**", "**Adjusted Odds Ratio**")
+)
+```
+```
+#logistic regression analysis in sample who needed therapy - ANY COMPLEMENTARY MEDICINE
+
+```{r}
+options(survey.lonely.psu = "adjust")
+```
+
+
+```{r}
+regressionNT_anycam <- svyglm( AnyCAM.cat ~ Age.all.data.0.1.cat + Sex.cat + Ethnicity.cat +
+                                      Education.cat + Insurance.cat.0.1 + General_Health + DEPEV_A + Depression.sev + ANXEV_A + Anxiety.sev,
+                                     family = quasibinomial(),
+                                     design = nhisdata_survey)
+round(
+  cbind(
+    summary(regressionNT_anycam,
+            df.resid = degf(regressionNT_anycam$survey.design))$coef,
+    confint(regressionNT_anycam,
+            ddf = degf(regressionNT_anycam$survey.design))
+  ),
+  4
+)
+```
+```
+
+```{r}
+table(nhisdata$Education.cat, nhisdata$AnyCAM.cat)
+```
+
+#Odds Ratio of Any complementary medicine
+
+```{r}
+OR.CI.anycam <- cbind(
+        "AOR" = exp(coef(regressionNT_anycam)),
+        exp(confint(regressionNT_anycam,
+                    df.resid=degf(regressionNT_anycam$survey.design)))
+        )[-1,]
+                                
+round(OR.CI.anycam, 3)
+```
+#table of any complementary medicine
+
+```{r}
+library(gtsummary)
+t1 <- regressionNT_anycam %>%
+  tbl_regression(intercept = T,
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 # estimate_fun = function(x) style_sigfig(x, digits = 2),
+  ) %>%
+  modify_column_hide(p.value) %>%
+  modify_caption("Weighted logistic regression results predicting any complementary medicine use in patients who needed therapy but did not get it")
+
+t2 <- regressionNT_anycam %>%
+  tbl_regression(intercept = F,     # No intercept in OR table
+                 exponentiate = T,  # OR = exp(B)
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 pvalue_fun   = function(x) style_pvalue(x, digits = 3),
+  ) %>%
+  add_global_p(keep = T, test.statistic = "F"
+               # Uncomment to use design df for Type III test p-values
+               # (but then they will not match the regression term p-values for
+               #  binary predictors)
+               #  error.df = degf(fit.ex8.1$survey.design)
+  )
+t1
+t2
+
+tbl_merge(
+  tbls = list(t1, t2),
+  tab_spanner = c("**Regression Coefficients**", "**Adjusted Odds Ratio**")
+)
+```
+#logistic regression analysis in sample who needed therapy - Massage therapist
+```{r}
+options(survey.lonely.psu = "adjust")
+```
+
+```{r}
+regressionNT_massage <- svyglm( Massage.cat ~ Age.all.data.0.1.cat + Sex.cat + Ethnicity.cat +
+                                      Education.cat + Insurance.cat.0.1 + General_Health + DEPEV_A + Depression.sev + ANXEV_A + Anxiety.sev,
+                                     family = quasibinomial(),
+                                     design = nhisdata_survey)
+round(
+  cbind(
+    summary(regressionNT_massage,
+            df.resid = degf(regressionNT_massage$survey.design))$coef,
+    confint(regressionNT_anycam,
+            ddf = degf(regressionNT_massage$survey.design))
+  ),
+  4
+)
+```
+#Odds Ratio of Massage therapist
+
+```{r}
+OR.CI.massage <- cbind(
+        "AOR" = exp(coef(regressionNT_massage)),
+        exp(confint(regressionNT_massage,
+                    df.resid=degf(regressionNT_massage$survey.design)))
+        )[-1,]
+                                
+round(OR.CI.massage, 3)
+```
+#table massage therapist
+
+```{r}
+library(gtsummary)
+t1 <- regressionNT_massage %>%
+  tbl_regression(intercept = T,
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 # estimate_fun = function(x) style_sigfig(x, digits = 2),
+  ) %>%
+  modify_column_hide(p.value) %>%
+  modify_caption("Weighted logistic regression results predicting massage use in patients who needed therapy but did not get it")
+
+t2 <- regressionNT_massage %>%
+  tbl_regression(intercept = F,     # No intercept in OR table
+                 exponentiate = T,  # OR = exp(B)
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 pvalue_fun   = function(x) style_pvalue(x, digits = 3),
+  ) %>%
+  add_global_p(keep = T, test.statistic = "F"
+               # Uncomment to use design df for Type III test p-values
+               # (but then they will not match the regression term p-values for
+               #  binary predictors)
+               #  error.df = degf(fit.ex8.1$survey.design)
+  )
+t1
+t2
+
+tbl_merge(
+  tbls = list(t1, t2),
+  tab_spanner = c("**Regression Coefficients**", "**Adjusted Odds Ratio**")
+)
+```
+
+#logistic regression analysis in sample who needed therapy - Naturopathy
+
+```{r}
+options(survey.lonely.psu = "adjust")
+
+```
+
+```{r}
+regressionNT_naturopathy <- svyglm( Naturopathy.cat ~ Age.all.data.0.1.cat + Sex.cat + Ethnicity.cat +
+                                      Education.cat + Insurance.cat.0.1 + General_Health + DEPEV_A + Depression.sev + ANXEV_A + Anxiety.sev,
+                                     family = quasibinomial(),
+                                     design = nhisdata_survey)
+round(
+  cbind(
+    summary(regressionNT_naturopathy,
+            df.resid = degf(regressionNT_massage$survey.design))$coef,
+    confint(regressionNT_naturopathy,
+            ddf = degf(regressionNT_naturopathy$survey.design))
+  ),
+  4
+)
+```
+#Odds Ratio of Naturopathy
+
+```{r}
+OR.CI.naturopathy <- cbind(
+        "AOR" = exp(coef(regressionNT_naturopathy)),
+        exp(confint(regressionNT_naturopathy,
+                    df.resid=degf(regressionNT_naturopathy$survey.design)))
+        )[-1,]
+                                
+round(OR.CI.naturopathy, 3)
+```
+#table for naturopathy
+
+```{r}
+library(gtsummary)
+t1 <- regressionNT_naturopathy %>%
+  tbl_regression(intercept = T,
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 # estimate_fun = function(x) style_sigfig(x, digits = 2),
+  ) %>%
+  modify_column_hide(p.value) %>%
+  modify_caption("Weighted logistic regression results predicting naturopathy use in patients who needed therapy but did not get it")
+
+t2 <- regressionNT_naturopathy %>%
+  tbl_regression(intercept = F,     # No intercept in OR table
+                 exponentiate = T,  # OR = exp(B)
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 pvalue_fun   = function(x) style_pvalue(x, digits = 3),
+  ) %>%
+  add_global_p(keep = T, test.statistic = "F"
+               # Uncomment to use design df for Type III test p-values
+               # (but then they will not match the regression term p-values for
+               #  binary predictors)
+               #  error.df = degf(fit.ex8.1$survey.design)
+  )
+t1
+t2
+
+tbl_merge(
+  tbls = list(t1, t2),
+  tab_spanner = c("**Regression Coefficients**", "**Adjusted Odds Ratio**")
+)
+```
+
+```{r}
+table(nhisdata$Education.cat, nhisdata$Naturopathy.cat)
+table(nhisdata$Ethnicity.cat, nhisdata$Naturopathy.cat)
+```
+#logistic regression analysis in sample who needed therapy - Yoga
+
+```{r}
+options(survey.lonely.psu = "adjust")
+```
+
+```{r}
+regressionNT_yoga <- svyglm(Yoga.cat.0.1 ~ Age.all.data.0.1.cat + Sex.cat + Ethnicity.cat +
+                                      Education.cat + Insurance.cat.0.1 + General_Health + DEPEV_A + Depression.sev + ANXEV_A + Anxiety.sev,
+                                     family = quasibinomial(),
+                                     design = nhisdata_survey)
+round(
+  cbind(
+    summary(regressionNT_yoga,
+            df.resid = degf(regressionNT_yoga$survey.design))$coef,
+    confint(regressionNT_yoga,
+            ddf = degf(regressionNT_yoga$survey.design))
+  ),
+  4
+)
+```
+#Odds Ratio of Yoga
+
+```{r}
+OR.CI.yoga <- cbind(
+        "AOR" = exp(coef(regressionNT_yoga)),
+        exp(confint(regressionNT_yoga,
+                    df.resid=degf(regressionNT_yoga$survey.design)))
+        )[-1,]
+                                
+round(OR.CI.yoga, 3)
+```
+# table for yoga
+
+```{r}
+library(gtsummary)
+t1 <- regressionNT_yoga %>%
+  tbl_regression(intercept = T,
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 # estimate_fun = function(x) style_sigfig(x, digits = 2),
+  ) %>%
+  modify_column_hide(p.value) %>%
+  modify_caption("Weighted logistic regression results predicting yoga use in patients who needed therapy but did not get it")
+
+t2 <- regressionNT_yoga %>%
+  tbl_regression(intercept = F,     # No intercept in OR table
+                 exponentiate = T,  # OR = exp(B)
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 pvalue_fun   = function(x) style_pvalue(x, digits = 3),
+  ) %>%
+  add_global_p(keep = T, test.statistic = "F"
+               # Uncomment to use design df for Type III test p-values
+               # (but then they will not match the regression term p-values for
+               #  binary predictors)
+               #  error.df = degf(fit.ex8.1$survey.design)
+  )
+t1
+t2
+
+tbl_merge(
+  tbls = list(t1, t2),
+  tab_spanner = c("**Regression Coefficients**", "**Adjusted Odds Ratio**")
+)
+```
+
+#logistic regression analysis in sample who needed therapy - Yoga
+
+
+```{r}
+options(survey.lonely.psu = "adjust")
+```
+
+```{r}
+regressionNT_meditation <- svyglm(Meditation.cat.0.1 ~ Age.all.data.0.1.cat + Sex.cat + Ethnicity.cat +
+                                      Education.cat + Insurance.cat.0.1 + General_Health + DEPEV_A + Depression.sev + ANXEV_A + Anxiety.sev,
+                                     family = quasibinomial(),
+                                     design = nhisdata_survey)
+round(
+  cbind(
+    summary(regressionNT_meditation,
+            df.resid = degf(regressionNT_meditation$survey.design))$coef,
+    confint(regressionNT_meditation,
+            ddf = degf(regressionNT_meditation$survey.design))
+  ),
+  4
+)
+```
+
+```{r}
+OR.CI.meditation <- cbind(
+        "AOR" = exp(coef(regressionNT_meditation)),
+        exp(confint(regressionNT_meditation,
+                    df.resid=degf(regressionNT_meditation$survey.design)))
+        )[-1,]
+                                
+round(OR.CI.meditation, 3)
+```
+
+```{r}
+library(gtsummary)
+t1 <- regressionNT_meditation %>%
+  tbl_regression(intercept = T,
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 # estimate_fun = function(x) style_sigfig(x, digits = 2),
+  ) %>%
+  modify_column_hide(p.value) %>%
+  modify_caption("Weighted logistic regression results predicting meditation use in patients who needed therapy but did not get it")
+
+t2 <- regressionNT_meditation %>%
+  tbl_regression(intercept = F,     # No intercept in OR table
+                 exponentiate = T,  # OR = exp(B)
+                 # Use style_number to round to 2 digits (e.g., 1.27)
+                 estimate_fun = function(x) style_number(x, digits = 2),
+                 # Use style_sigfig to keep 2 significant digits (e.g., 1.3)
+                 pvalue_fun   = function(x) style_pvalue(x, digits = 3),
+  ) %>%
+  add_global_p(keep = T, test.statistic = "F"
+               # Uncomment to use design df for Type III test p-values
+               # (but then they will not match the regression term p-values for
+               #  binary predictors)
+               #  error.df = degf(fit.ex8.1$survey.design)
+  )
+t1
+t2
+
+tbl_merge(
+  tbls = list(t1, t2),
+  tab_spanner = c("**Regression Coefficients**", "**Adjusted Odds Ratio**")
+)
+```
+
